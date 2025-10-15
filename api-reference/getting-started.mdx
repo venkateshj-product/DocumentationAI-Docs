@@ -104,8 +104,8 @@ func main() {
 ```
 
 <Callout kind="success">
-  **Success!** If you received a response with pet data, your authentication is working correctly and you're ready to explore more endpoints.
-</Callout>
+  **Success!** If you received a response with content data, your authentication is working correctly and you're ready to explore more endpoints.
+  </Callout>
 
 ## Common API Workflows
 
@@ -114,7 +114,7 @@ func main() {
 Create a content (video/audio) from a public URL:
 
 <ExpandableGroup>
-<Expandable title="Basic Pet Creation" default-open="true">
+<Expandable title="Basic Content Creation" default-open="true">
 
 **Endpoint**: `POST /video/services/api/v1/contents`
 
@@ -203,69 +203,33 @@ curl -X POST "https://api.videograph.ai/video/services/api/v1/contents" \
 ```
 </CodeGroup>
 
-**Successful response** (Status 201):
+**Successful response** (example):
 ```json
 {
-  "id": 123,
-  "name": "Max",
-  "category": {
-    "id": 1,
-    "name": "Dogs"
-  },
-  "status": "available",
-  "age": 2,
-  "breed": "Labrador",
-  "description": "Friendly and energetic dog, great with kids",
-  "photoUrls": [],
-  "tags": [],
-  "createdAt": "2024-01-15T10:30:00Z",
-  "updatedAt": "2024-01-15T10:30:00Z"
+  "status": "Success",
+  "message": "Triggered processing of videos.",
+  "code": 201,
+  "data": {
+    "title": "Demo Video",
+    "description": "This is a demo video",
+    "contentId": "",
+    "tags": ["Animation", "Video demo"],
+    "metadata": [{ "key": "color", "value": "blue" }],
+    "playback_policy": ["public"],
+    "mp4_support": true,
+    "save_original_copy": false,
+    "statusId": 1,
+    "status": "Processing",
+    "duration": 100,
+    "thumbnails": [],
+    "created_at": 1673347977713
+  }
 }
 ```
 
 </Expandable>
 
-<Expandable title="Pet with Photos and Tags" default-open="false">
-
-Create a more detailed pet entry with photos and tags:
-
-```javascript
-const detailedPet = {
-  name: "Luna",
-  categoryId: 2, // Cats category
-  status: "available",
-  age: 1,
-  breed: "Siamese",
-  description: "Beautiful blue-eyed Siamese kitten",
-  photoUrls: [
-    "https://images.acme.com/cats/luna1.jpg",
-    "https://images.acme.com/cats/luna2.jpg"
-  ],
-  tags: [
-    { name: "playful" },
-    { name: "indoor" },
-    { name: "vaccinated" }
-  ]
-};
-
-const response = await fetch('https://api.acme.com/v1/pets', {
-  method: 'POST',
-  headers: {
-    'X-API-Key': 'YOUR_API_KEY',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(detailedPet)
-});
-```
-
-**Pro tips for pet creation**:
-- **Use descriptive names** that help identify the pet
-- **Include photos** to increase adoption chances
-- **Add relevant tags** for better searchability
-- **Provide accurate breed** and age information
-- **Write engaging descriptions** that highlight personality
-
-</Expandable>
+<!-- Removed pet-centric example -->
 </ExpandableGroup>
 
 ### 2. Get Paginated Contents
@@ -276,18 +240,20 @@ Fetch contents with pagination and filters:
 <Expandable title="Filter by Status and Category" default-open="true">
 
 **Available query parameters**:
-- `status` - Filter by availability (`available`, `pending`, `sold`)
-- `category` - Filter by category name
-- `limit` - Number of results (default: 20, max: 100)
-- `offset` - Skip results for pagination
+- `pageSize` (required) - Number of items per page
+- `pageNum` (required) - Page number to fetch
+- `includeAdditional` (optional) - Include metadata with results
+- `assetCollectionUUID` (optional) - Filter by asset collection
+- `phrase` (optional) - Search phrase
+- `tag` (optional) - Filter by tag
 
-<CodeGroup tabs="Available Dogs,Pending Adoptions,Recently Added">
+<CodeGroup tabs="Page 1,Page 2,With Filters">
 ```javascript
 const baseUrl = 'https://api.videograph.ai';
 const basic = btoa(`${process.env.VG_ACCESS_TOKEN}:${process.env.VG_SECRET}`);
 
 const pageSize = 10;
-const pageNum = 1;
+let pageNum = 1;
 
 const response = await fetch(
   `${baseUrl}/video/services/api/v1/contents/paginated?pageSize=${pageSize}&pageNum=${pageNum}`,
@@ -298,54 +264,58 @@ const paged = await response.json();
 console.log('Total contents:', paged.data.total);
 console.log('Items on page:', paged.data.contents.length);
 ```
+
+```javascript
+// Fetch next page
+pageNum = 2;
+const resp2 = await fetch(
+  `${baseUrl}/video/services/api/v1/contents/paginated?pageSize=${pageSize}&pageNum=${pageNum}`,
+  { headers: { 'Authorization': `Basic ${basic}`, 'Accept': 'application/json' } }
+);
+const page2 = await resp2.json();
+console.log('Page 2 items:', page2.data.contents.length);
+```
+
+```javascript
+// With filters
+const filtered = await fetch(
+  `${baseUrl}/video/services/api/v1/contents/paginated?pageSize=10&pageNum=1&phrase=demo&tag=Animation`,
+  { headers: { 'Authorization': `Basic ${basic}`, 'Accept': 'application/json' } }
+);
+console.log(await filtered.json());
+```
 </CodeGroup>
 
 </Expandable>
 
-<Expandable title="Pagination for Large Results" default-open="false">
+<Expandable title="Iterate All Pages" default-open="false">
 
-Handle large datasets with proper pagination:
+Handle large result sets by iterating pages:
 
 ```javascript
-async function getAllAvailablePets() {
-  const allPets = [];
-  let offset = 0;
-  const limit = 50; // Reasonable batch size
-  let hasMore = true;
-
-  while (hasMore) {
-    const response = await fetch(
-      `https://api.acme.com/v1/pets?status=available&limit=${limit}&offset=${offset}`,
-      {
-        headers: {
-          'X-API-Key': 'YOUR_API_KEY',
-          'Content-Type': 'application/json'
-        }
-      }
+async function listAllContents() {
+  const all = [];
+  let pageNum = 1;
+  const pageSize = 50;
+  while (true) {
+    const res = await fetch(
+      `${baseUrl}/video/services/api/v1/contents/paginated?pageSize=${pageSize}&pageNum=${pageNum}`,
+      { headers: { 'Authorization': `Basic ${basic}`, 'Accept': 'application/json' } }
     );
-
-    const data = await response.json();
-    allPets.push(...data.pets);
-    
-    hasMore = data.pagination.hasMore;
-    offset += limit;
-    
-    console.log(`Fetched ${data.pets.length} pets, total so far: ${allPets.length}`);
+    const data = await res.json();
+    all.push(...(data.data.contents || []));
+    const fetched = (data.data.contents || []).length;
+    if (!fetched || fetched < pageSize) break;
+    pageNum += 1;
   }
-
-  return allPets;
+  return all;
 }
-
-// Usage
-const allAvailablePets = await getAllAvailablePets();
-console.log(`Total available pets: ${allAvailablePets.length}`);
 ```
 
-**Performance tips**:
-- Use reasonable batch sizes (20-50 items)
-- Implement loading states in your UI
-- Consider caching results for repeated queries
-- Use `hasMore` to determine if more pages exist
+**Tips**:
+- Use reasonable page sizes (20-50)
+- Respect any 429 Retry-After headers
+- Cache frequently accessed results
 
 </Expandable>
 </ExpandableGroup>
@@ -355,7 +325,7 @@ console.log(`Total available pets: ${allAvailablePets.length}`);
 Modify a content’s metadata or title:
 
 <ExpandableGroup>
-<Expandable title="Update Pet Status" default-open="true">
+<Expandable title="Update Content Title" default-open="true">
 
 **Endpoint**: `PUT /video/services/api/v1/contents/{CONTENT_ID}`
 
@@ -383,48 +353,7 @@ async function updateContent(contentId, updates) {
 await updateContent('CONTENT_UUID', { title: 'New Title' });
 ```
 
-</Expandable>
-
-<Expandable title="Complete Pet Information Update" default-open="false">
-
-Update multiple fields at once:
-
-```javascript
-async function updatePetDetails(petId, updates) {
-  // Only include fields that are being updated
-  const updateData = {};
-  
-  if (updates.name) updateData.name = updates.name;
-  if (updates.age) updateData.age = updates.age;
-  if (updates.description) updateData.description = updates.description;
-  if (updates.status) updateData.status = updates.status;
-  if (updates.photoUrls) updateData.photoUrls = updates.photoUrls;
-
-  const response = await fetch(`https://api.acme.com/v1/pets/${petId}`, {
-    method: 'PUT',
-    headers: {
-      'X-API-Key': 'YOUR_API_KEY',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(updateData)
-  });
-
-  return response.json();
-}
-
-// Example: Update pet description and add photos
-const updatedPet = await updatePetDetails(123, {
-  description: "Updated: Very friendly dog, loves playing fetch and swimming",
-  photoUrls: [
-    "https://images.acme.com/pets/123/action1.jpg",
-    "https://images.acme.com/pets/123/portrait.jpg"
-  ]
-});
-
-console.log('Pet updated:', updatedPet);
-```
-
-</Expandable>
+ </Expandable>
 </ExpandableGroup>
 
 ### 4. Direct Uploads (Create Upload URL)
@@ -432,7 +361,7 @@ console.log('Pet updated:', updatedPet);
 Create a direct upload and get a signed URL:
 
 <ExpandableGroup>
-<Expandable title="List All Categories" default-open="true">
+<Expandable title="Create Direct Upload" default-open="true">
 
 **Endpoint**: `POST /video/services/api/v1/uploads`
 
@@ -457,63 +386,19 @@ const uploadInit = await resp.json();
 console.log(uploadInit);
 ```
 
-**Expected response**:
+**Expected response** (example):
 ```json
 {
-  "categories": [
-    {
-      "id": 1,
-      "name": "Dogs",
-      "description": "All types of dogs"
-    },
-    {
-      "id": 2, 
-      "name": "Cats",
-      "description": "All types of cats"
-    },
-    {
-      "id": 3,
-      "name": "Birds",
-      "description": "All types of birds"
-    }
-  ]
+  "id": "zd01Pe2bNpYhxbrwYABgFE01twZdtv4M00kts2i02GhbGjc",
+  "url": "https://...signed-upload-url...",
+  "cors_origin": "https://example.com/",
+  "timeout": 3600,
+  "status": "Waiting"
 }
 ```
 
 </Expandable>
-
-<Expandable title="Create New Category" default-open="false">
-
-**Endpoint**: `POST /categories`
-
-```javascript
-const newCategory = {
-  name: "Reptiles",
-  description: "Snakes, lizards, turtles, and other reptiles"
-};
-
-const response = await fetch('https://api.acme.com/v1/categories', {
-  method: 'POST',
-  headers: {
-    'X-API-Key': 'YOUR_API_KEY',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(newCategory)
-});
-
-const createdCategory = await response.json();
-console.log('New category created:', createdCategory);
-
-// Now you can use this category ID when creating pets
-const newSnake = {
-  name: "Slither",
-  categoryId: createdCategory.id,
-  status: "available",
-  breed: "Ball Python"
-};
-```
-
-</Expandable>
+<!-- Removed unrelated category example -->
 </ExpandableGroup>
 
 ## Clips, Subtitles, Thumbnails
@@ -661,150 +546,49 @@ try {
   const contents = await api.listContents({});
   console.log('Contents:', contents);
 } catch (error) {
-  console.error('Error fetching pets:', error.message);
+  console.error('Error fetching contents:', error.message);
 }
 ```
 
-## Rate Limits and Optimization
-
-### Understanding Rate Limits
-
-The ACME Company API enforces the following rate limits:
-
-| Authentication | Requests per Hour | Burst Limit |
-|---------------|-------------------|-------------|
-| **API Key** | 1,000 | 100 per minute |
-| **JWT Token** | 5,000 | 300 per minute |
-| **Unauthenticated** | 100 | 20 per minute |
-
-**Rate limit headers** in responses:
-```
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 999
-X-RateLimit-Reset: 1642694400
-```
-
-### Optimization Strategies
-
-<ExpandableGroup>
-<Expandable title="Request Batching and Caching" default-open="true">
+## Resilience and Retries
 
 ```javascript
-class OptimizedPetStoreAPI extends PetStoreAPI {
-  constructor(apiKey) {
-    super(apiKey);
-    this.cache = new Map();
-    this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
-  }
-
-  // Cache frequently accessed data
-  async getCachedPet(id) {
-    const cacheKey = `pet_${id}`;
-    const cached = this.cache.get(cacheKey);
-    
-    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-      return cached.data;
-    }
-
-    const pet = await this.getPet(id);
-    this.cache.set(cacheKey, {
-      data: pet,
-      timestamp: Date.now()
-    });
-
-    return pet;
-  }
-
-  // Batch multiple pet requests
-  async getMultiplePets(ids) {
-    const promises = ids.map(id => this.getCachedPet(id));
-    return Promise.all(promises);
-  }
-
-  // Intelligent pagination
-  async getAllPetsInCategory(categoryName, batchSize = 50) {
-    const allPets = [];
-    let offset = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const result = await this.getPets({
-        category: categoryName,
-        limit: batchSize,
-        offset: offset
-      });
-
-      allPets.push(...result.pets);
-      hasMore = result.pagination.hasMore;
-      offset += batchSize;
-
-      // Add small delay to be respectful of rate limits
-      if (hasMore) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-
-    return allPets;
-  }
-}
-```
-
-</Expandable>
-
-<Expandable title="Retry Logic with Exponential Backoff" default-open="false">
-
-```javascript
-async function requestWithRetry(requestFn, maxRetries = 3) {
+async function requestWithRetry(makeRequest, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await requestFn();
+      return await makeRequest();
     } catch (error) {
-      // Don't retry on client errors (4xx)
       if (error.message.includes('400') || error.message.includes('401')) {
         throw error;
       }
-
-      // Retry on rate limits and server errors
       if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-        console.log(`Request failed, retrying in ${delay}ms... (attempt ${attempt})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(r => setTimeout(r, delay));
       } else {
         throw error;
       }
     }
   }
 }
-
-// Usage
-const pets = await requestWithRetry(() => 
-  api.getPets({ status: 'available' })
-);
 ```
-
-</Expandable>
-</ExpandableGroup>
 
 ## Next Steps
 
 <Callout kind="success">
-  **Great job!** You've learned the fundamentals of the ACME Company API. You can now create, read, update, and manage pets and categories.
+**Great job!** You've learned the fundamentals of the Videograph API. You can now create, list, update, and manage contents, uploads, clips, subtitles, and thumbnails.
 </Callout>
 
 ### Explore More Features
 
-- **[Complete API Reference](petstore-openapi.yaml)** - Explore all available endpoints and parameters
-- **[Authentication Guide](authentication)** - Learn about JWT tokens and advanced security
-- **[Webhooks](webhooks)** - Get real-time notifications for pet updates
-- **[SDKs and Libraries](sdks)** - Official libraries for popular programming languages
+- **[Authentication Guide](authentication)** - Learn about HTTP Basic authentication
+- Explore endpoints in this section for contents, uploads, clips, subtitles, thumbnails
 
 ### Common Next Steps
 
-1. **Build a pet listing application** with search and filtering
-2. **Implement user authentication** for customer accounts
-3. **Add real-time updates** with webhooks
-4. **Create an admin dashboard** for pet management
-5. **Integrate with payment systems** for adoption fees
+1. Build a content library UI with pagination and filters
+2. Add direct uploads to ingest new assets
+3. Automate clip creation for highlights
+4. Generate thumbnails and manage subtitles
 
 ### Get Help
 
