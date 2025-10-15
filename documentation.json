@@ -147,10 +147,10 @@
             ]
           },
           {
-            "group": "Pet Store API",
+            "group": "Videograph API",
             "icon": "database",
             "expandable": true,
-            "openapi": "api-reference/petstore-openapi.yaml",
+            "openapi": "api-reference/videograph-openapi.yaml",
             "pages": []
           }
         ]
